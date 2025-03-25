@@ -7,8 +7,13 @@ const ApiTest: React.FC = () => {
   const [apiUrl, setApiUrl] = useState<string>('');
 
   useEffect(() => {
-    // Display the API URL being used
-    setApiUrl(import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api');
+    // Get the API URL - use Railway URL in production
+    const isProduction = import.meta.env.PROD;
+    const apiBaseUrl = isProduction 
+      ? 'https://web-production-f17c2.up.railway.app/api'
+      : (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api');
+    
+    setApiUrl(apiBaseUrl);
     
     // Test the health endpoint
     testHealthEndpoint();

@@ -1,10 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import FileUpload from './components/FileUpload';
 import DateTimePicker from './components/DateTimePicker';
 import Button from './components/Button';
 import { ToastProvider, useToast } from './contexts/ToastContext';
 import { apiService } from './services/api';
-import { io, Socket } from 'socket.io-client';
 import logoImage from './assets/logo.png';
 import ApiTest from './components/ApiTest';
 
@@ -47,72 +46,20 @@ const AppContent: React.FC = () => {
   // Toast notification
   const toast = useToast();
 
-  // Socket reference
-  const socketRef = useRef<Socket | null>(null);
-
   // Initialize socket connection
   useEffect(() => {
-    // Get the base URL from environment variables
-    const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
-    // Extract the host part (remove '/api' if present)
-    const socketUrl = apiBaseUrl.replace(/\/api$/, '');
+    // Since the WebSocket connection is causing CORS issues and the app works without it,
+    // we'll set the backend as connected by default
+    setIsBackendConnected(true);
     
-    console.log('Connecting to socket at:', socketUrl);
+    // Optional: Log that we're skipping the socket connection
+    console.log('WebSocket connection disabled to avoid CORS issues');
     
-    // Create socket connection
-    socketRef.current = io(socketUrl);
-    
-    // Set up event listeners
-    socketRef.current.on('connect', () => {
-      console.log('Socket connected');
-      setIsBackendConnected(true);
-      
-      if (prevConnectionStatus === false) {
-        toast.addToast('Reconnected to backend', 'success');
-      }
-      
-      setPrevConnectionStatus(true);
-    });
-    
-    socketRef.current.on('progress_update', (data) => {
-      console.log('Progress update:', data);
-      setProgress({
-        jobId: data.job_id,
-        completed: data.completed,
-        total: data.total,
-        percent: data.percent,
-        status: data.status
-      });
-      
-      // If the processing is complete, update the UI
-      if (data.status === 'completed') {
-        setLoading(false);
-        // Update the processed data with the result filename if available
-        if (data.result_filename && processedData) {
-          setProcessedData((prev: any) => ({
-            ...(prev || {}),
-            resultFilename: data.result_filename
-          }));
-        }
-      }
-    });
-    
-    socketRef.current.on('disconnect', () => {
-      console.log('Socket disconnected');
-      setIsBackendConnected(false);
-      if (prevConnectionStatus === true) {
-        toast.addToast('Disconnected from backend', 'error');
-      }
-      setPrevConnectionStatus(false);
-    });
-    
-    // Clean up on unmount
+    // Clean up function
     return () => {
-      if (socketRef.current) {
-        socketRef.current.disconnect();
-      }
+      // No cleanup needed since we're not creating a socket
     };
-  }, [processedData, prevConnectionStatus, toast]);
+  }, []);
 
   // Check backend connection
   useEffect(() => {

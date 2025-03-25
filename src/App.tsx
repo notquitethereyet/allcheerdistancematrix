@@ -1,11 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import FileUpload from './components/FileUpload';
 import DateTimePicker from './components/DateTimePicker';
 import Button from './components/Button';
 import { ToastProvider, useToast } from './contexts/ToastContext';
 import { apiService } from './services/api';
 import logoImage from './assets/logo.png';
-import ApiTest from './components/ApiTest';
 
 // Main App component wrapper with ToastProvider
 const AppWrapper: React.FC = () => {
@@ -21,8 +20,6 @@ const AppContent: React.FC = () => {
   // State
   const [selectedDate, setSelectedDate] = useState<Date | null>(new Date());
   const [loading, setLoading] = useState<boolean>(false);
-  const [isBackendConnected, setIsBackendConnected] = useState<boolean | null>(null);
-  const [prevConnectionStatus, setPrevConnectionStatus] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [xlsxData, setXlsxData] = useState<any[] | null>(null);
   const [processedData, setProcessedData] = useState<any | null>(null);
@@ -41,62 +38,9 @@ const AppContent: React.FC = () => {
     percent: 0,
     status: 'idle'
   });
-  const [showApiTest, setShowApiTest] = useState<boolean>(false);
 
   // Toast notification
   const toast = useToast();
-
-  // Initialize socket connection
-  useEffect(() => {
-    // Since the WebSocket connection is causing CORS issues and the app works without it,
-    // we'll set the backend as connected by default
-    setIsBackendConnected(true);
-    
-    // Optional: Log that we're skipping the socket connection
-    console.log('WebSocket connection disabled to avoid CORS issues');
-    
-    // Clean up function
-    return () => {
-      // No cleanup needed since we're not creating a socket
-    };
-  }, []);
-
-  // Check backend connection
-  useEffect(() => {
-    const checkBackendConnection = async () => {
-      try {
-        const response = await fetch('http://localhost:5000/api/health');
-        const isConnected = response.status === 200;
-        setIsBackendConnected(isConnected);
-        
-        // Show toast notification if connection status changes
-        if (prevConnectionStatus !== null && prevConnectionStatus !== isConnected) {
-          if (isConnected) {
-            toast.addToast('Backend connection restored', 'success');
-          } else {
-            toast.addToast('Backend connection lost', 'error');
-          }
-        }
-        
-        setPrevConnectionStatus(isConnected);
-      } catch (error) {
-        setIsBackendConnected(false);
-        if (prevConnectionStatus !== false) {
-          toast.addToast('Cannot connect to backend server', 'error');
-          setPrevConnectionStatus(false);
-        }
-      }
-    };
-    
-    // Check connection immediately
-    checkBackendConnection();
-    
-    // Set up interval to check connection periodically
-    const interval = setInterval(checkBackendConnection, 10000);
-    
-    // Clean up interval on unmount
-    return () => clearInterval(interval);
-  }, [toast, prevConnectionStatus]);
 
   // Handle file upload
   const handleFileUpload = (data: any[]) => {
@@ -218,18 +162,28 @@ const AppContent: React.FC = () => {
     toast.addToast('Downloading sample data...', 'info');
   };
 
-  // Test toast notifications with different types
-  const testToastNotifications = () => {
-    toast.addToast('Google Maps API connection successful', 'success', 5000);
-    setTimeout(() => {
-      toast.addToast('Cannot connect to backend server', 'error', 5000);
-    }, 300);
-    setTimeout(() => {
-      toast.addToast('Time conversion may be affected by timezone settings', 'warning', 5000);
-    }, 600);
-    setTimeout(() => {
-      toast.addToast('Using UTC time for distance calculations', 'info', 5000);
-    }, 900);
+  const testApiConnection = async () => {
+    console.log('Testing API connection...');
+    try {
+      // Get the API URL - use Railway URL in production
+      const isProduction = import.meta.env.PROD;
+      const apiBaseUrl = isProduction 
+        ? 'https://web-production-f17c2.up.railway.app/api'
+        : (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api');
+      
+      toast.addToast(`Testing connection to: ${apiBaseUrl}`, 'info');
+      
+      const isHealthy = await apiService.checkHealth();
+      
+      if (isHealthy) {
+        toast.addToast('API connection successful! ', 'success');
+      } else {
+        toast.addToast('API is not healthy ', 'error');
+      }
+    } catch (err) {
+      console.error('Health check error:', err);
+      toast.addToast(`API connection failed: ${err instanceof Error ? err.message : String(err)} `, 'error');
+    }
   };
 
   return (
@@ -237,288 +191,256 @@ const AppContent: React.FC = () => {
       {/* Navbar */}
       <nav className="bg-[#FC6060] text-white p-4 shadow-md">
         <div className="container mx-auto flex justify-between items-center">
-          <div className="flex items-center space-x-2">
-            <img src={logoImage} alt="distMatrix Logo" className="h-8" />
-            <h1 className="text-xl font-bold">distMatrix</h1>
-          </div>
-          <button 
-            onClick={() => setShowApiTest(!showApiTest)}
-            className="px-3 py-1 bg-[#03CF9C] text-white rounded hover:bg-opacity-90 transition-colors text-sm"
-          >
-            {showApiTest ? 'Hide API Test' : 'Test API Connection'}
-          </button>
+          {/* Empty navbar - removed logo and text */}
         </div>
       </nav>
 
-      {/* API Test Panel (conditionally rendered) */}
-      {showApiTest && (
-        <div className="container mx-auto mt-4 px-4">
-          <ApiTest />
-        </div>
-      )}
-      
       {/* Main content */}
       <main className="section">
-        {/* Header with logo and connection status */}
-        <div className="card" style={{ marginTop: '1.5rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ display: 'flex', alignItems: 'center' }}>
-              <img src={logoImage} alt="AllCheer Logo" style={{ height: '50px', marginRight: '15px' }} />
-              <h1 className="section-header">AllCheer Distance Matrix Calculator</h1>
-            </div>
-            
-            {/* Backend connection status indicator */}
-            <div style={{ display: 'flex', alignItems: 'center' }}>
-              <div style={{ 
-                height: '12px', 
-                width: '12px', 
-                borderRadius: '50%', 
-                marginRight: '8px',
-                backgroundColor: isBackendConnected === null
-                  ? '#9CA3AF'
-                  : isBackendConnected
-                  ? '#03CF9C'
-                  : '#FC6060'
-              }}></div>
-              <span style={{ fontSize: '0.875rem', color: '#4B5563' }}>
-                {isBackendConnected === null
-                  ? 'Checking connection...'
-                  : isBackendConnected
-                  ? 'Backend connected'
-                  : 'Backend disconnected'}
-              </span>
-            </div>
-            <button 
-              onClick={testToastNotifications}
-              className="px-3 py-1 bg-blue-100 text-blue-700 rounded-md text-sm hover:bg-blue-200"
-            >
-              Test Toasts
-            </button>
-          </div>
-        </div>
-        
-        {/* File Processor Page */}
-        <div className="card">
-          <h2 className="section-header">Upload & Process</h2>
-          
-          <div style={{ marginBottom: '2rem' }}>
-            <h3 style={{ fontSize: '1.125rem', fontWeight: '500', color: 'var(--text-color)', marginBottom: '0.75rem' }}>
-              Step 1: Upload your data file
-            </h3>
-            <p style={{ color: '#4B5563', marginBottom: '1rem' }}>
-              Upload an Excel file with origin and destination addresses.
-            </p>
-            
-            {/* Sample input table to show the expected format */}
-            <div className="sample-table-container">
-              <div className="sample-table-header">
-                Required Spreadsheet Format
+        <div className="container mx-auto px-4 md:px-6">
+          {/* Header with logo and connection status */}
+          <div className="card" style={{ marginTop: '1.5rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center' }}>
+                <img src={logoImage} alt="AllCheer Logo" style={{ height: '50px', marginRight: '15px' }} />
+                <h1 className="section-header">AllCheer Distance Matrix Calculator</h1>
               </div>
-              <div style={{ padding: '1rem' }}>
-                <p style={{ marginBottom: '1rem', fontSize: '0.875rem' }}>
-                  Your Excel file should include the following columns. Here's a sample of the expected format:
-                </p>
-                
-                <div className="table-container">
-                  <table className="table">
-                    <thead>
-                      <tr>
-                        <th>Address Code</th>
-                        <th>Address</th>
-                        <th>Transport Mode</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr>
-                        <td>SF001</td>
-                        <td>1315 Ellis Street, San Francisco, California 94115</td>
-                        <td>DRIVE</td>
-                      </tr>
-                      <tr>
-                        <td>SF002</td>
-                        <td>1329 7th Avenue, San Francisco, California 94122</td>
-                        <td>DRIVE</td>
-                      </tr>
-                      <tr>
-                        <td>SF003</td>
-                        <td>27 Fountain St, San Francisco, California 94114</td>
-                        <td>TRANSIT</td>
-                      </tr>
-                      <tr>
-                        <td>SF004</td>
-                        <td>123 Main St, San Francisco, California 94105</td>
-                        <td>TELE</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-                
-                <div style={{ marginTop: '1rem', fontSize: '0.875rem', color: 'var(--primary-highlight)' }}>
-                  <p><strong>Notes:</strong></p>
-                  <ul style={{ listStyleType: 'disc', paddingLeft: '1.25rem' }}>
-                    <li>The column names must be exactly as shown above</li>
-                    <li>Transport Mode should be one of: DRIVE, TRANSIT, or TELE</li>
-                    <li>Addresses should be complete with city, state, and zip code for best results</li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-            
-            <div style={{ marginTop: '1.5rem' }}>
-              <FileUpload onFileUploaded={handleFileUpload} />
               
-              {xlsxData && (
-                <div style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: 'var(--primary-highlight)' }}>
-                  File loaded successfully with {xlsxData.length} rows of data.
-                </div>
-              )}
+              {/* API Test Button */}
+              <div style={{ display: 'flex', alignItems: 'center' }}>
+                <button 
+                  onClick={testApiConnection}
+                  className="btn btn-primary"
+                >
+                  Test API
+                </button>
+              </div>
             </div>
           </div>
           
-          <div style={{ marginBottom: '1.5rem' }}>
-            <h3 style={{ fontSize: '1.125rem', fontWeight: '500', color: 'var(--text-color)', marginBottom: '0.75rem' }}>
-              Step 2: Select departure date and time
-            </h3>
-            <p style={{ color: '#4B5563', marginBottom: '1rem' }}>
-              Choose when you plan to start your journey. This affects travel time estimates.
-            </p>
+          {/* File Processor Page */}
+          <div className="card">
+            <h2 className="section-header">Upload & Process</h2>
             
-            <div style={{ maxWidth: '400px' }}>
-              <DateTimePicker
-                label="Departure Date & Time"
-                value={selectedDate}
-                onChange={setSelectedDate}
-                required
-              />
-            </div>
-            
-            <div style={{ marginTop: '1rem' }}>
-              <Button 
-                onClick={handleConvertDepartureTimeToUTC}
-                variant="secondary"
-                disabled={!selectedDate || loading}
-                className="btn btn-highlight"
-              >
-                Convert to UTC
-              </Button>
-            </div>
-            
-            {utcDepartureTime && (
-              <div className="utc-time-card">
-                <div className="utc-time-header">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.5"/>
-                    <path d="M12 6V12L16 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                  <h3>UTC Time for Google Maps API</h3>
+            <div style={{ marginBottom: '2rem' }}>
+              <h3 style={{ fontSize: '1.125rem', fontWeight: '500', color: 'var(--text-color)', marginBottom: '0.75rem' }}>
+                Step 1: Upload your data file
+              </h3>
+              <p style={{ color: '#4B5563', marginBottom: '1rem' }}>
+                Upload an Excel file with origin and destination addresses.
+              </p>
+              
+              {/* Sample input table to show the expected format */}
+              <div className="sample-table-container">
+                <div className="sample-table-header">
+                  Required Spreadsheet Format
                 </div>
-                
-                <div className="utc-time-content">
-                  <div className="utc-time-item">
-                    <span className="utc-time-label">UTC Time:</span>
-                    <span className="utc-time-value">{utcDepartureTime}</span>
+                <div style={{ padding: '1rem' }}>
+                  <p style={{ marginBottom: '1rem', fontSize: '0.875rem' }}>
+                    Your Excel file should include the following columns. Here's a sample of the expected format:
+                  </p>
+                  
+                  <div className="table-container">
+                    <table className="table">
+                      <thead>
+                        <tr>
+                          <th>Address Code</th>
+                          <th>Address</th>
+                          <th>Transport Mode</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td>SF001</td>
+                          <td>1315 Ellis Street, San Francisco, California 94115</td>
+                          <td>DRIVE</td>
+                        </tr>
+                        <tr>
+                          <td>SF002</td>
+                          <td>1329 7th Avenue, San Francisco, California 94122</td>
+                          <td>DRIVE</td>
+                        </tr>
+                        <tr>
+                          <td>SF003</td>
+                          <td>27 Fountain St, San Francisco, California 94114</td>
+                          <td>TRANSIT</td>
+                        </tr>
+                        <tr>
+                          <td>SF004</td>
+                          <td>123 Main St, San Francisco, California 94105</td>
+                          <td>TELE</td>
+                        </tr>
+                      </tbody>
+                    </table>
                   </div>
                   
-                  <div className="utc-time-item">
-                    <span className="utc-time-label">Unix Timestamp:</span>
-                    <span className="utc-time-value">{utcUnixTimestamp}</span>
+                  <div style={{ marginTop: '1rem', fontSize: '0.875rem', color: 'var(--primary-highlight)' }}>
+                    <p><strong>Notes:</strong></p>
+                    <ul style={{ listStyleType: 'disc', paddingLeft: '1.25rem' }}>
+                      <li>The column names must be exactly as shown above</li>
+                      <li>Transport Mode should be one of: DRIVE, TRANSIT, or TELE</li>
+                      <li>Addresses should be complete with city, state, and zip code for best results</li>
+                    </ul>
                   </div>
                 </div>
               </div>
-            )}
+              
+              <div style={{ marginTop: '1.5rem' }}>
+                <FileUpload onFileUploaded={handleFileUpload} />
+                
+                {xlsxData && (
+                  <div style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: 'var(--primary-highlight)' }}>
+                    File loaded successfully with {xlsxData.length} rows of data.
+                  </div>
+                )}
+              </div>
+            </div>
             
-            <div style={{ marginTop: '1.5rem' }}>
-              <Button
-                onClick={handleProcessFile}
-                disabled={!xlsxData || !utcDepartureTime || loading}
-                isLoading={loading && progress.status === 'processing'}
-                className="btn btn-primary"
-              >
-                Calculate Distance Matrix
-              </Button>
-              {!xlsxData && (
-                <p className="validation-message">Please upload a file first</p>
+            <div style={{ marginBottom: '1.5rem' }}>
+              <h3 style={{ fontSize: '1.125rem', fontWeight: '500', color: 'var(--text-color)', marginBottom: '0.75rem' }}>
+                Step 2: Select departure date and time
+              </h3>
+              <p style={{ color: '#4B5563', marginBottom: '1rem' }}>
+                Choose when you plan to start your journey. This affects travel time estimates.
+              </p>
+              
+              <div style={{ maxWidth: '400px' }}>
+                <DateTimePicker
+                  label="Departure Date & Time"
+                  value={selectedDate}
+                  onChange={setSelectedDate}
+                  required
+                />
+              </div>
+              
+              <div style={{ marginTop: '1rem' }}>
+                <Button 
+                  onClick={handleConvertDepartureTimeToUTC}
+                  variant="secondary"
+                  disabled={!selectedDate || loading}
+                  className="btn btn-highlight"
+                >
+                  Convert to UTC
+                </Button>
+              </div>
+              
+              {utcDepartureTime && (
+                <div className="utc-time-card">
+                  <div className="utc-time-header">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.5"/>
+                      <path d="M12 6V12L16 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    <h3>UTC Time for Google Maps API</h3>
+                  </div>
+                  
+                  <div className="utc-time-content">
+                    <div className="utc-time-item">
+                      <span className="utc-time-label">UTC Time:</span>
+                      <span className="utc-time-value">{utcDepartureTime}</span>
+                    </div>
+                    
+                    <div className="utc-time-item">
+                      <span className="utc-time-label">Unix Timestamp:</span>
+                      <span className="utc-time-value">{utcUnixTimestamp}</span>
+                    </div>
+                  </div>
+                </div>
               )}
-              {xlsxData && !utcDepartureTime && (
-                <p className="validation-message">Please convert the time to UTC first</p>
-              )}
+              
+              <div style={{ marginTop: '1.5rem' }}>
+                <Button
+                  onClick={handleProcessFile}
+                  disabled={!xlsxData || !utcDepartureTime || loading}
+                  isLoading={loading && progress.status === 'processing'}
+                  className="btn btn-primary"
+                >
+                  Calculate Distance Matrix
+                </Button>
+                {!xlsxData && (
+                  <p className="validation-message">Please upload a file first</p>
+                )}
+                {xlsxData && !utcDepartureTime && (
+                  <p className="validation-message">Please convert the time to UTC first</p>
+                )}
+              </div>
             </div>
           </div>
+          
+          {processedData && (
+            <div className="card">
+              <h2 className="section-header">Processing Results</h2>
+              
+              <div style={{ marginBottom: '1rem' }}>
+                <p style={{ fontWeight: '500', color: 'var(--primary-highlight)', marginBottom: '0.5rem' }}>
+                  {processedData.message}
+                </p>
+                
+                <p style={{ color: 'var(--text-color)' }}>
+                  Processed {processedData.totalPairs || processedData.rowCount} rows of data.
+                </p>
+                
+                {processedData.resultFilename ? (
+                  <a
+                    href={apiService.downloadResult(processedData.resultFilename)}
+                    className="btn btn-highlight"
+                    style={{ marginTop: '1rem', display: 'inline-flex', alignItems: 'center' }}
+                    download
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    Download Complete Results ({processedData.totalPairs} rows)
+                  </a>
+                ) : (
+                  <button
+                    onClick={handleDownloadButtonClick}
+                    className="btn btn-highlight"
+                    style={{ marginTop: '1rem', display: 'inline-flex', alignItems: 'center' }}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    Download Sample Data
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+          
+          {progress.status === 'processing' && (
+            <div className="card">
+              <h3 style={{ fontSize: '1.125rem', fontWeight: '500', color: 'var(--primary-highlight)', marginBottom: '1rem' }}>
+                Processing Distance Matrix
+              </h3>
+              
+              <div style={{ width: '100%', backgroundColor: '#E5E7EB', borderRadius: '9999px', height: '8px', marginBottom: '0.5rem' }}>
+                <div 
+                  style={{ 
+                    width: `${progress.percent}%`, 
+                    backgroundColor: 'var(--primary-color)', 
+                    height: '8px', 
+                    borderRadius: '9999px',
+                    transition: 'width 0.3s ease-in-out'
+                  }}
+                ></div>
+              </div>
+              
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem', color: '#4B5563' }}>
+                <span>
+                  {progress.completed} of {progress.total} address pairs processed
+                </span>
+                <span>{progress.percent}%</span>
+              </div>
+            </div>
+          )}
+          
+          {error && (
+            <div className="card" style={{ backgroundColor: '#FEF2F2', borderColor: '#FC6060' }}>
+              <p style={{ color: '#B91C1C' }}>{error}</p>
+            </div>
+          )}
         </div>
-        
-        {processedData && (
-          <div className="card">
-            <h2 className="section-header">Processing Results</h2>
-            
-            <div style={{ marginBottom: '1rem' }}>
-              <p style={{ fontWeight: '500', color: 'var(--primary-highlight)', marginBottom: '0.5rem' }}>
-                {processedData.message}
-              </p>
-              
-              <p style={{ color: 'var(--text-color)' }}>
-                Processed {processedData.totalPairs || processedData.rowCount} rows of data.
-              </p>
-              
-              {processedData.resultFilename ? (
-                <a
-                  href={apiService.downloadResult(processedData.resultFilename)}
-                  className="btn btn-highlight"
-                  style={{ marginTop: '1rem', display: 'inline-flex', alignItems: 'center' }}
-                  download
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                  </svg>
-                  Download Complete Results ({processedData.totalPairs} rows)
-                </a>
-              ) : (
-                <button
-                  onClick={handleDownloadButtonClick}
-                  className="btn btn-highlight"
-                  style={{ marginTop: '1rem', display: 'inline-flex', alignItems: 'center' }}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                  </svg>
-                  Download Sample Data
-                </button>
-              )}
-            </div>
-          </div>
-        )}
-        
-        {progress.status === 'processing' && (
-          <div className="card">
-            <h3 style={{ fontSize: '1.125rem', fontWeight: '500', color: 'var(--primary-highlight)', marginBottom: '1rem' }}>
-              Processing Distance Matrix
-            </h3>
-            
-            <div style={{ width: '100%', backgroundColor: '#E5E7EB', borderRadius: '9999px', height: '8px', marginBottom: '0.5rem' }}>
-              <div 
-                style={{ 
-                  width: `${progress.percent}%`, 
-                  backgroundColor: 'var(--primary-color)', 
-                  height: '8px', 
-                  borderRadius: '9999px',
-                  transition: 'width 0.3s ease-in-out'
-                }}
-              ></div>
-            </div>
-            
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem', color: '#4B5563' }}>
-              <span>
-                {progress.completed} of {progress.total} address pairs processed
-              </span>
-              <span>{progress.percent}%</span>
-            </div>
-          </div>
-        )}
-        
-        {error && (
-          <div className="card" style={{ backgroundColor: '#FEF2F2', borderColor: '#FC6060' }}>
-            <p style={{ color: '#B91C1C' }}>{error}</p>
-          </div>
-        )}
       </main>
       
       {/* Footer */}

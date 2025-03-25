@@ -196,6 +196,7 @@ export const apiService = {
 
   // Download result file
   downloadResult: (filename: string): string => {
+    // Ensure the URL is properly formatted
     return `${API_BASE_URL}/download-result/${filename}`;
   },
   

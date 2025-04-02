@@ -4,13 +4,16 @@ import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
 // Make sure this is correctly pointing to your Flask backend
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
-// API endpoints - including the /api prefix to match backend routes
+// Check if the base URL already ends with /api
+const baseUrlHasApiSuffix = API_BASE_URL.endsWith('/api');
+
+// API endpoints - conditionally include the /api prefix based on whether it's already in the base URL
 const API_ENDPOINTS = {
-  HEALTH: '/api/health',
-  CONVERT_TIME: '/api/convert-time',
-  UPLOAD_MATRIX: '/api/upload-distance-matrix',
-  DOWNLOAD_RESULT: '/api/download-result',
-  CALCULATE_DISTANCE: '/api/calculate-distance',
+  HEALTH: baseUrlHasApiSuffix ? '/health' : '/api/health',
+  CONVERT_TIME: baseUrlHasApiSuffix ? '/convert-time' : '/api/convert-time',
+  UPLOAD_MATRIX: baseUrlHasApiSuffix ? '/upload-distance-matrix' : '/api/upload-distance-matrix',
+  DOWNLOAD_RESULT: baseUrlHasApiSuffix ? '/download-result' : '/api/download-result',
+  CALCULATE_DISTANCE: baseUrlHasApiSuffix ? '/calculate-distance' : '/api/calculate-distance',
 };
 
 // Log the API endpoints for debugging
@@ -18,6 +21,7 @@ console.log('API endpoints:', API_ENDPOINTS);
 
 // You might need to log it to verify what URL is actually being used
 console.log('API base URL:', API_BASE_URL);
+console.log('Base URL has /api suffix:', baseUrlHasApiSuffix);
 
 // Create axios request configuration
 const axiosConfig: AxiosRequestConfig = {
@@ -290,7 +294,9 @@ export const apiService = {
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Processed Data');
       
       // Generate Excel file
-      const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+      const excelBuffer = XLSX.write(workbook, { 
+        bookType: 'xlsx', type: 'array' 
+      });
       
       // Create Blob from buffer
       const blob = new Blob([excelBuffer], { 

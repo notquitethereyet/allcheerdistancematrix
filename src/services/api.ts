@@ -2,7 +2,13 @@ import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
 
 // Base URL - pointing to your Flask backend
 // Make sure this is correctly pointing to your Flask backend
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+let API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+
+// Ensure the API_BASE_URL has a protocol (http:// or https://)
+if (!API_BASE_URL.startsWith('http://') && !API_BASE_URL.startsWith('https://')) {
+  API_BASE_URL = `https://${API_BASE_URL}`;
+  console.log('Added https:// protocol to API_BASE_URL:', API_BASE_URL);
+}
 
 // Check if the base URL already ends with /api
 const baseUrlHasApiSuffix = API_BASE_URL.endsWith('/api');

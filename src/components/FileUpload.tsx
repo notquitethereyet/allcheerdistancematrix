@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import * as XLSX from 'xlsx';
 
 interface FileUploadProps {
-  onFileUploaded: (data: any[]) => void;
+  onFileUploaded: (data: any[], originalFile?: File) => void;
   acceptedFileTypes?: string;
   maxFileSizeMB?: number;
   multiple?: boolean;
@@ -77,7 +77,7 @@ const FileUpload: React.FC<FileUploadProps> = ({
       console.log('Headers:', Object.keys(formattedData[0]));
       
       setFileNames([file.name]);
-      onFileUploaded(formattedData);
+      onFileUploaded(formattedData, file);
     } catch (err) {
       console.error('Error parsing Excel file:', err);
       setError('Failed to parse the Excel file. Please make sure it is a valid XLSX file.');

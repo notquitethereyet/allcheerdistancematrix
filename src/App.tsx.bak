@@ -87,7 +87,7 @@ const AppContent: React.FC = () => {
     setProgress({
       jobId: null,
       completed: 0,
-      total: xlsxData.length * xlsxData.length, // Estimate total pairs
+      total: 0,
       percent: 0,
       status: 'processing'
     });
@@ -122,7 +122,7 @@ const AppContent: React.FC = () => {
       // Append the file to FormData
       formData.append('file', file);
       
-      // Add other parameters
+      // Add other parameters - keeping these for backward compatibility
       formData.append('departureDate', selectedDate.toISOString().split('T')[0]);
       
       // Format the UTC time string to match the expected format "HH:MM:SS"
@@ -131,76 +131,26 @@ const AppContent: React.FC = () => {
       formData.append('departureTime', utcTimeOnly);
       
       // Use the Unix timestamp directly from the time conversion
-      formData.append('timestamp', String(utcUnixTimestamp || 0));
+      // This is the key parameter needed for the optimized batch processing
+      formData.append('unixTimestamp', String(utcUnixTimestamp || 0));
       
       console.log('Sending to backend:', {
         departureDate: selectedDate.toISOString().split('T')[0],
         departureTime: utcTimeOnly,
-        timestamp: utcUnixTimestamp
+        unixTimestamp: utcUnixTimestamp
       });
       
-      // Show processing toast
-      toast.addToast('Processing started - this may take several minutes for large files', 'info');
+      // Call API to process the file with FormData
+      const result = await apiService.uploadDistanceMatrix(formData);
       
-      // Set up a progress simulator to give user feedback during long processing
-      let progressInterval: number | null = null;
-      const startProgressSimulation = () => {
-        let simulatedProgress = 0;
-        progressInterval = window.setInterval(() => {
-          // Slowly increase progress to give user feedback
-          simulatedProgress += Math.random() * 2;
-          if (simulatedProgress > 95) {
-            simulatedProgress = 95; // Cap at 95% until we get real completion
-            clearInterval(progressInterval!);
-          }
-          
-          setProgress(prev => ({
-            ...prev,
-            percent: Math.min(95, Math.floor(simulatedProgress)),
-            completed: Math.floor((prev.total * simulatedProgress) / 100)
-          }));
-        }, 1000);
-      };
+      // Update state with the result
+      setProcessedData(result);
       
-      // Start progress simulation
-      startProgressSimulation();
-      
-      try {
-        // Call API to process the file with FormData
-        const result = await apiService.uploadDistanceMatrix(formData);
-        
-        // Clear progress simulation
-        if (progressInterval) clearInterval(progressInterval);
-        
-        // Set progress to 100%
-        setProgress({
-          jobId: null,
-          completed: result.totalPairsCalculated || result.totalPairs || 0,
-          total: result.totalPairsCalculated || result.totalPairs || 0,
-          percent: 100,
-          status: 'completed'
-        });
-        
-        // Update state with the result
-        setProcessedData(result);
-        
-        toast.addToast('File processing completed successfully', 'success');
-      } catch (err: any) {
-        // Clear progress simulation
-        if (progressInterval) clearInterval(progressInterval);
-        
-        console.error('Error processing file:', err);
-        setError(err.message || 'Error processing file');
-        toast.addToast(`Error: ${err.message || 'Error processing file'}`, 'error');
-        setProgress((prev) => ({ ...prev, status: 'error' }));
-      } finally {
-        setLoading(false);
-      }
+      toast.addToast('File processing started', 'success');
     } catch (err: any) {
-      // This catch block handles errors in the file preparation stage
-      console.error('Error preparing file:', err);
-      setError(err.message || 'Error preparing file for upload');
-      toast.addToast('Error preparing file for upload', 'error');
+      console.error('Error processing file:', err);
+      setError(err.message || 'Error processing file');
+      toast.addToast('Error processing file', 'error');
       setProgress((prev) => ({ ...prev, status: 'error' }));
       setLoading(false);
     }

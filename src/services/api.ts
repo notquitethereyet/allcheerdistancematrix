@@ -140,7 +140,16 @@ export const apiService = {
       console.log('Time conversion API endpoint:', fullUrl);
       
       // Format the date as expected by the backend (YYYY-MM-DDTHH:MM:SS)
-      const localTimeStr = localDate.toISOString();
+      // Don't use toISOString() as it converts to UTC and adds 'Z'
+      // Instead, format the local time directly
+      const localTimeStr = localDate.getFullYear() + '-' + 
+                          String(localDate.getMonth() + 1).padStart(2, '0') + '-' + 
+                          String(localDate.getDate()).padStart(2, '0') + ' ' + 
+                          String(localDate.getHours()).padStart(2, '0') + ':' + 
+                          String(localDate.getMinutes()).padStart(2, '0') + ':' + 
+                          String(localDate.getSeconds()).padStart(2, '0');
+      
+      console.log('Sending local time for conversion:', localTimeStr);
       
       const response = await axios.post(fullUrl, {
         localTime: localTimeStr,

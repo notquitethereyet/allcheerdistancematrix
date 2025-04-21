@@ -7,6 +7,8 @@
   --text-color: #2D2A32;
   --primary-highlight: #03CF9C;
   --secondary-highlight: #62B3ED;
+  --success-color: #059669;
+  --warning-color: #F59E0B;
 }
 
 body {
@@ -419,6 +421,39 @@ code {
   font-weight: bold;
 }
 
+/* Worksheet Selector */
+.worksheet-selector {
+  margin-bottom: 1rem;
+}
+
+.worksheet-selector select {
+  appearance: none;
+  background-color: white;
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+  padding: 0.5rem 2.5rem 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--text-color);
+  width: 100%;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+  background-position: right 0.5rem center;
+  background-repeat: no-repeat;
+  background-size: 0.8em 0.8em;
+}
+
+.worksheet-selector select:focus {
+  outline: none;
+  border-color: var(--secondary-highlight);
+  box-shadow: 0 0 0 2px rgba(98, 179, 237, 0.2);
+}
+
+.worksheet-selector select:disabled {
+  background-color: #f3f4f6;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
 /* UTC Time Card */
 .utc-time-card {
   margin-top: 1rem;
@@ -487,11 +522,11 @@ code {
   .container {
     padding: 0 0.75rem;
   }
-  
+
   .card {
     padding: 1rem;
   }
-  
+
   .btn {
     min-width: 80px;
   }

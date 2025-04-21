@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import * as XLSX from 'xlsx';
 
 interface FileUploadProps {
-  onFileUploaded: (data: any[], originalFile?: File) => void;
+  onFileUploaded: (data: any[], worksheetNames: string[], workbook: XLSX.WorkBook, originalFile?: File) => void;
   acceptedFileTypes?: string;
   maxFileSizeMB?: number;
   multiple?: boolean;
@@ -29,29 +29,36 @@ const FileUpload: React.FC<FileUploadProps> = ({
 
       // Read the file as an array buffer
       const buffer = await file.arrayBuffer();
-      
+
       // Parse the Excel file
       const workbook = XLSX.read(buffer, { type: 'array' });
-      
-      // Get the first worksheet
-      const worksheetName = workbook.SheetNames[0];
+
+      // Get all worksheet names
+      const worksheetNames = workbook.SheetNames;
+
+      if (worksheetNames.length === 0) {
+        throw new Error('The Excel file does not contain any worksheets');
+      }
+
+      // Get the first worksheet by default
+      const worksheetName = worksheetNames[0];
       const worksheet = workbook.Sheets[worksheetName];
-      
+
       // Convert to JSON with these specific options to preserve spaces in headers
       const data = XLSX.utils.sheet_to_json(worksheet, {
         raw: true,
         defval: null,
         header: 'A', // Use A, B, C as headers initially
       });
-      
+
       // If data is empty, throw an error
       if (!data || data.length === 0) {
-        throw new Error('The Excel file is empty or could not be parsed');
+        throw new Error('The selected worksheet is empty or could not be parsed');
       }
-      
+
       // Get the header row (first row)
       const headerRow = data[0] as Record<string, unknown>;
-      
+
       // Create a mapping of column letters to actual headers
       const headerMap: Record<string, string> = {};
       Object.entries(headerRow).forEach(([col, value]) => {
@@ -59,7 +66,7 @@ const FileUpload: React.FC<FileUploadProps> = ({
           headerMap[col] = String(value);
         }
       });
-      
+
       // Transform the data to use the actual headers and skip the header row
       const formattedData = data.slice(1).map((row: unknown) => {
         const typedRow = row as Record<string, unknown>;
@@ -71,13 +78,14 @@ const FileUpload: React.FC<FileUploadProps> = ({
         });
         return newRow;
       });
-      
+
       // Log the first row to check if headers are preserved
       console.log('Parsed data first row:', formattedData[0]);
       console.log('Headers:', Object.keys(formattedData[0]));
-      
+      console.log('Available worksheets:', worksheetNames);
+
       setFileNames([file.name]);
-      onFileUploaded(formattedData, file);
+      onFileUploaded(formattedData, worksheetNames, workbook, file);
     } catch (err) {
       console.error('Error parsing Excel file:', err);
       setError('Failed to parse the Excel file. Please make sure it is a valid XLSX file.');
@@ -97,11 +105,11 @@ const FileUpload: React.FC<FileUploadProps> = ({
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      
+
       // Check file type
       const fileExtension = '.' + file.name.split('.').pop()?.toLowerCase();
       const isValidType = acceptedFileTypes.includes(fileExtension);
-      
+
       // Check file size
       const isValidSize = file.size <= maxSizeBytes;
 
@@ -132,10 +140,10 @@ const FileUpload: React.FC<FileUploadProps> = ({
 
     try {
       const validFiles = validateFiles(files);
-      
+
       if (validFiles.length > 0) {
         setFileNames(validFiles.map(file => file.name));
-        
+
         // Process the first file (or all files if needed)
         handleFileRead(validFiles[0]);
       }
@@ -173,7 +181,7 @@ const FileUpload: React.FC<FileUploadProps> = ({
 
   return (
     <div className="w-full">
-      <div 
+      <div
         className={`file-upload-container ${isDragging ? 'dragging' : ''}`}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
@@ -188,7 +196,7 @@ const FileUpload: React.FC<FileUploadProps> = ({
           onChange={handleFileChange}
           multiple={multiple}
         />
-        
+
         <div className="file-icons">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="file-icon excel-icon">
             <path d="M14 2H6C4.89543 2 4 2.89543 4 4V20C4 21.1046 4.89543 22 6 22H18C19.1046 22 20 21.1046 20 20V8L14 2Z" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -197,7 +205,7 @@ const FileUpload: React.FC<FileUploadProps> = ({
             <path d="M8 17H16" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             <path d="M10 9H8" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
-          
+
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="file-icon csv-icon">
             <path d="M14 2H6C4.89543 2 4 2.89543 4 4V20C4 21.1046 4.89543 22 6 22H18C19.1046 22 20 21.1046 20 20V8L14 2Z" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             <path d="M14 2V8H20" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -205,7 +213,7 @@ const FileUpload: React.FC<FileUploadProps> = ({
             <path d="M9 15L12 18L15 15" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         </div>
-        
+
         <div className="file-status">
           {fileNames.length > 0 && !loading ? (
             <p className="file-name">
@@ -215,8 +223,8 @@ const FileUpload: React.FC<FileUploadProps> = ({
             <p className="no-file">No file selected</p>
           )}
         </div>
-        
-        <button 
+
+        <button
           className="choose-files-btn"
           onClick={openFileDialog}
           type="button"
@@ -228,15 +236,15 @@ const FileUpload: React.FC<FileUploadProps> = ({
           </svg>
           CHOOSE FILES
         </button>
-        
+
         <p className="drop-text">or drop files here</p>
-        
+
         {loading && (
           <div className="mt-4">
             <div className="loading-spinner"></div>
           </div>
         )}
-        
+
         {error && (
           <div className="file-error">
             {error}

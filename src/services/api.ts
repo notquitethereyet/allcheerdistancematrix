@@ -133,7 +133,7 @@ export const apiService = {
     try {
       const fullUrl = `${API_BASE_URL}${API_ENDPOINTS.HEALTH}`;
       console.log('Health check API endpoint:', fullUrl);
-      
+
       const response = await axios.get(fullUrl);
       return response.status === 200;
     } catch (error) {
@@ -143,55 +143,57 @@ export const apiService = {
   },
 
   // Convert local time to UTC
-  convertToUTC: async (localDate: Date): Promise<{ utcTime: string; unixTimestamp: number }> => {
+  convertToUTC: async (localDate: Date): Promise<{ utcTime: string; unixTimestamp: number; usedApi: boolean }> => {
     try {
       // Try to use the backend's time conversion API
       const fullUrl = `${API_BASE_URL}${API_ENDPOINTS.CONVERT_TIME}`;
       console.log('Time conversion API endpoint:', fullUrl);
-      
+
       // Format the date as expected by the backend (YYYY-MM-DDTHH:MM:SS)
       // Don't use toISOString() as it converts to UTC and adds 'Z'
       // Instead, format the local time directly
-      const localTimeStr = localDate.getFullYear() + '-' + 
-                          String(localDate.getMonth() + 1).padStart(2, '0') + '-' + 
-                          String(localDate.getDate()).padStart(2, '0') + ' ' + 
-                          String(localDate.getHours()).padStart(2, '0') + ':' + 
-                          String(localDate.getMinutes()).padStart(2, '0') + ':' + 
+      const localTimeStr = localDate.getFullYear() + '-' +
+                          String(localDate.getMonth() + 1).padStart(2, '0') + '-' +
+                          String(localDate.getDate()).padStart(2, '0') + ' ' +
+                          String(localDate.getHours()).padStart(2, '0') + ':' +
+                          String(localDate.getMinutes()).padStart(2, '0') + ':' +
                           String(localDate.getSeconds()).padStart(2, '0');
-      
+
       console.log('Sending local time for conversion:', localTimeStr);
-      
+
       const response = await axios.post(fullUrl, {
         localTime: localTimeStr,
         fromTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
       });
-      
+
       console.log('Time conversion response:', response.data);
-      
+
       return {
         utcTime: response.data.data.utcTime,
-        unixTimestamp: response.data.data.unixTimestamp
+        unixTimestamp: response.data.data.unixTimestamp,
+        usedApi: true
       };
     } catch (error: any) {
       console.error('Error converting time to UTC:', error);
-      
+
       // Log detailed error information
       if (error.response) {
         console.log('Error status:', error.response.status);
         console.log('Error data:', error.response.data);
       }
-      
+
       // Fallback: Do the conversion in the browser if the API is unavailable
       console.log('Using fallback time conversion method');
-      
+
       // Convert to UTC using the browser's Date methods
       const utcDate = new Date(localDate.getTime());
       const utcTimeString = utcDate.toISOString();
       const unixTimestamp = Math.floor(utcDate.getTime() / 1000);
-      
+
       return {
         utcTime: utcTimeString,
-        unixTimestamp: unixTimestamp
+        unixTimestamp: unixTimestamp,
+        usedApi: false
       };
     }
   },
@@ -213,17 +215,17 @@ export const apiService = {
   uploadDistanceMatrix: async (formData: FormData): Promise<DistanceMatrixResponse> => {
     try {
       console.log('Sending FormData to /upload-distance-matrix');
-      
+
       // Debug: Log FormData contents
       console.log('FormData entries:');
       for (const pair of formData.entries()) {
         console.log(`${pair[0]}: ${pair[1]}`);
       }
-      
+
       // Log the API endpoint being used
       const fullUrl = `${API_BASE_URL}${API_ENDPOINTS.UPLOAD_MATRIX}`;
       console.log('API endpoint:', fullUrl);
-      
+
       // Send the request with detailed logging
       const response = await axios.post(fullUrl, formData, {
         headers: {
@@ -236,29 +238,29 @@ export const apiService = {
           return status < 500; // Resolve only if status is less than 500
         }
       });
-      
+
       console.log('Server response received:', response.status, response.statusText);
-      
+
       // Check if the response is successful
       if (response.status !== 200) {
         console.error('Server returned error status:', response.status, response.data);
         throw new Error(response.data?.message || `Server returned status ${response.status}`);
       }
-      
+
       return response.data.data;
     } catch (error: any) {
       console.error('Error uploading file for distance matrix:', error);
-      
+
       // Handle timeout errors specifically
       if (error.code === 'ECONNABORTED') {
         throw new Error('Request timed out. The process is taking too long. Please try with a smaller file or contact support.');
       }
-      
+
       // Handle network errors
       if (error.message === 'Network Error') {
         throw new Error('Network error. Please check your internet connection and try again.');
       }
-      
+
       // Pass through the error message from the server if available
       const errorMessage = error.response?.data?.message || error.message || 'Failed to upload file';
       throw new Error(errorMessage);
@@ -270,7 +272,7 @@ export const apiService = {
     try {
       const fullUrl = `${API_BASE_URL}${API_ENDPOINTS.CALCULATE_DISTANCE}`;
       console.log('Calculate distance API endpoint:', fullUrl);
-      
+
       const response = await axios.post(fullUrl, request);
       return response.data.data;
     } catch (error) {
@@ -285,41 +287,41 @@ export const apiService = {
     const baseUrl = API_BASE_URL.endsWith('/') ? API_BASE_URL.slice(0, -1) : API_BASE_URL;
     return `${baseUrl}${API_ENDPOINTS.DOWNLOAD_RESULT}/${filename}`;
   },
-  
+
   // Download processed data as Excel file
   downloadProcessedData: async (data: any[], filename: string = 'processed_data.xlsx'): Promise<void> => {
     try {
       // Dynamically import xlsx
       const XLSX = await import('xlsx');
-      
+
       // Convert data to worksheet
       const worksheet = XLSX.utils.json_to_sheet(data);
-      
+
       // Create workbook and append worksheet
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Processed Data');
-      
+
       // Generate Excel file
-      const excelBuffer = XLSX.write(workbook, { 
-        bookType: 'xlsx', type: 'array' 
+      const excelBuffer = XLSX.write(workbook, {
+        bookType: 'xlsx', type: 'array'
       });
-      
+
       // Create Blob from buffer
-      const blob = new Blob([excelBuffer], { 
-        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+      const blob = new Blob([excelBuffer], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
       });
-      
+
       // Create download link
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
       link.setAttribute('download', filename);
-      
+
       // Append link to body, click it, and remove it
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      
+
       // Release the object URL
       window.URL.revokeObjectURL(url);
     } catch (error) {

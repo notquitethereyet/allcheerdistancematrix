@@ -1,333 +1,162 @@
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
 
-// Base URL - pointing to your Flask backend
-// Make sure this is correctly pointing to your Flask backend
+// ---------- Base URL handling ----------
 let API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
-// Ensure the API_BASE_URL has a protocol (http:// or https://)
+// Ensure protocol
 if (!API_BASE_URL.startsWith('http://') && !API_BASE_URL.startsWith('https://')) {
   API_BASE_URL = `https://${API_BASE_URL}`;
-  console.log('Added https:// protocol to API_BASE_URL:', API_BASE_URL);
 }
 
-// Check if the base URL already ends with /api
+// Allows either ".../api" or no suffix; endpoints adjust accordingly
 const baseUrlHasApiSuffix = API_BASE_URL.endsWith('/api');
 
-// API endpoints - conditionally include the /api prefix based on whether it's already in the base URL
+// ---------- Endpoints actually implemented by backend ----------
 const API_ENDPOINTS = {
   HEALTH: baseUrlHasApiSuffix ? '/health' : '/api/health',
-  CONVERT_TIME: baseUrlHasApiSuffix ? '/convert-time' : '/api/convert-time',
   UPLOAD_MATRIX: baseUrlHasApiSuffix ? '/upload-distance-matrix' : '/api/upload-distance-matrix',
   DOWNLOAD_RESULT: baseUrlHasApiSuffix ? '/download-result' : '/api/download-result',
-  CALCULATE_DISTANCE: baseUrlHasApiSuffix ? '/calculate-distance' : '/api/calculate-distance',
+  // NOTE: No /convert-time and no /calculate-distance in backend
 };
 
-// Log the API endpoints for debugging
-console.log('API endpoints:', API_ENDPOINTS);
+console.log('[API] base:', API_BASE_URL);
+console.log('[API] endpoints:', API_ENDPOINTS);
 
-// You might need to log it to verify what URL is actually being used
-console.log('API base URL:', API_BASE_URL);
-console.log('Base URL has /api suffix:', baseUrlHasApiSuffix);
-
-// Create axios request configuration
+// ---------- Axios instance ----------
 const axiosConfig: AxiosRequestConfig = {
   baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
   },
-  timeout: 30000, // 30 seconds
-  withCredentials: false, // Don't send cookies for cross-site requests
+  timeout: 30000,
+  withCredentials: false,
 };
 
-// Log the axios configuration for debugging
-console.log('Axios config:', axiosConfig);
-
-// Create axios instance
 const axiosInstance: AxiosInstance = axios.create(axiosConfig);
 
-// Add request interceptor for debugging
 axiosInstance.interceptors.request.use(
-  config => {
-    console.log('Making request to:', config.url);
-    console.log('Request config:', config);
+  (config) => {
+    console.log('[API] →', config.method?.toUpperCase(), config.baseURL + (config.url || ''));
     return config;
   },
-  error => {
-    console.error('Request error:', error);
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error)
 );
 
-// Add response interceptor for debugging
 axiosInstance.interceptors.response.use(
-  response => {
-    console.log('Response received:', response.status);
-    return response;
+  (res) => {
+    console.log('[API] ←', res.status, res.config.url);
+    return res;
   },
-  error => {
-    console.error('Response error:', error.message);
-    console.error('Full error:', error);
-    if (error.response) {
-      console.error('Error status:', error.response.status);
-      console.error('Error data:', error.response.data);
-    }
+  (error) => {
+    console.error('[API] error:', error?.response?.status, error?.response?.data || error?.message);
     return Promise.reject(error);
   }
 );
 
-// Type definitions
-export interface ProcessedFileData {
-  success: boolean;
-  message: string;
-  rowCount?: number;
-  totalPairs?: number;
-  resultFilename?: string;
-}
-
-export interface TimeConversionResponse {
-  utcTime: string;
-  unixTimestamp: number;
-  dstActive: boolean;
-}
-
-export interface DistanceCalculationRequest {
-  originAddress: string;
-  destinationAddress: string;
-  transportMode: string;
-  departureTime: string;
-}
-
-export interface DistanceCalculationResponse {
-  origin: string;
-  destination: string;
-  transportMode: string;
-  timeInMinutes: number;
-  distanceInKm: number;
-  departureTime: string;
-}
-
+// ---------- Types ----------
 export interface DistanceMatrixResult {
   origin_code: string;
   origin_address: string;
   destination_code: string;
   destination_address: string;
   transport_mode: string;
-  timeInMinutes: number;
+  timeInMinutes: number | null;
+  distanceMeters?: number | null;
+  element_status?: string | null;
+  element_condition?: string | null;
 }
 
 export interface DistanceMatrixResponse {
   message: string;
-  totalPairs: number;
-  totalPairsCalculated?: number;
-  sampleData: DistanceMatrixResult[];
-  resultFilename: string;
-  job_id?: string;
+  totalPairsInOutput: number;
+  resultFilename: string | null;
   processingTimeSeconds?: number;
+  timestampSource?: string;
+  failedBatchCount?: number;
+  apiPairErrors?: number;
+  apiUsed?: string;
+  batchSizeUsed?: string;
 }
 
-// API methods
+// ---------- Helpers ----------
+/** Returns true if any row in the parsed sheet is TRANSIT (case-insensitive). */
+export const hasTransitRows = (rows: any[]): boolean =>
+  Array.isArray(rows) &&
+  rows.some((r) => String(r?.['Transport Mode'] ?? r?.transport_mode ?? '').toLowerCase() === 'transit');
+
+/** Client-side UTC conversion. Returns unix seconds + ISO string. */
+export const toUtcUnix = (localDate: Date) => {
+  const unix = Math.floor(localDate.getTime() / 1000); // getTime() is epoch ms since 1970-01-01T00:00:00Z
+  return {
+    unixTimestamp: unix,
+    utcTime: new Date(unix * 1000).toISOString(),
+  };
+};
+
+// ---------- API surface ----------
 export const apiService = {
-  // Check the health of the API
+  // Health check
   checkHealth: async (): Promise<boolean> => {
     try {
       const fullUrl = `${API_BASE_URL}${API_ENDPOINTS.HEALTH}`;
-      console.log('Health check API endpoint:', fullUrl);
-
-      const response = await axios.get(fullUrl);
-      return response.status === 200;
-    } catch (error) {
-      console.error('Health check failed:', error);
+      const res = await axios.get(fullUrl);
+      return res.status === 200;
+    } catch {
       return false;
     }
   },
 
-  // Convert local time to UTC
-  convertToUTC: async (localDate: Date): Promise<{ utcTime: string; unixTimestamp: number; usedApi: boolean }> => {
-    try {
-      // Try to use the backend's time conversion API
-      const fullUrl = `${API_BASE_URL}${API_ENDPOINTS.CONVERT_TIME}`;
-      console.log('Time conversion API endpoint:', fullUrl);
+  /**
+   * Build FormData for /upload-distance-matrix.
+   * Automatically attaches `timestamp` only if there are any TRANSIT rows.
+   */
+  buildUploadFormData: (file: File, rowsFromSheet: any[], departureDate?: Date): FormData => {
+    const fd = new FormData();
+    fd.append('file', file);
 
-      // Format the date as expected by the backend (YYYY-MM-DDTHH:MM:SS)
-      // Don't use toISOString() as it converts to UTC and adds 'Z'
-      // Instead, format the local time directly
-      const localTimeStr = localDate.getFullYear() + '-' +
-                          String(localDate.getMonth() + 1).padStart(2, '0') + '-' +
-                          String(localDate.getDate()).padStart(2, '0') + ' ' +
-                          String(localDate.getHours()).padStart(2, '0') + ':' +
-                          String(localDate.getMinutes()).padStart(2, '0') + ':' +
-                          String(localDate.getSeconds()).padStart(2, '0');
-
-      console.log('Sending local time for conversion:', localTimeStr);
-
-      const response = await axios.post(fullUrl, {
-        localTime: localTimeStr,
-        fromTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
-      });
-
-      console.log('Time conversion response:', response.data);
-
-      return {
-        utcTime: response.data.data.utcTime,
-        unixTimestamp: response.data.data.unixTimestamp,
-        usedApi: true
-      };
-    } catch (error: any) {
-      console.error('Error converting time to UTC:', error);
-
-      // Log detailed error information
-      if (error.response) {
-        console.log('Error status:', error.response.status);
-        console.log('Error data:', error.response.data);
+    if (hasTransitRows(rowsFromSheet)) {
+      if (!departureDate) {
+        throw new Error('A departure time is required when the sheet contains TRANSIT rows.');
       }
-
-      // Fallback: Do the conversion in the browser if the API is unavailable
-      console.log('Using fallback time conversion method');
-
-      // Convert to UTC using the browser's Date methods
-      const utcDate = new Date(localDate.getTime());
-      const utcTimeString = utcDate.toISOString();
-      const unixTimestamp = Math.floor(utcDate.getTime() / 1000);
-
-      return {
-        utcTime: utcTimeString,
-        unixTimestamp: unixTimestamp,
-        usedApi: false
-      };
+      const { unixTimestamp } = toUtcUnix(departureDate);
+      fd.append('timestamp', String(unixTimestamp));
     }
+
+    return fd;
   },
 
-  // Mock method for processing XLSX data (can keep this during transition)
-  processXlsxFile: (data: any[]): any => {
-    console.log('Mock processing XLSX data:', data);
-    // Return some mock processed data
-    return {
-      success: true,
-      message: 'File processed successfully (mock)',
-      rowCount: data.length,
-      columnCount: data.length > 0 ? Object.keys(data[0]).length : 0,
-      sampleData: data.slice(0, 5),
-    };
-  },
-
-  // Upload distance matrix file
+  // Upload distance matrix file (expects FormData already built)
   uploadDistanceMatrix: async (formData: FormData): Promise<DistanceMatrixResponse> => {
     try {
-      console.log('Sending FormData to /upload-distance-matrix');
-
-      // Debug: Log FormData contents
-      console.log('FormData entries:');
-      for (const pair of formData.entries()) {
-        console.log(`${pair[0]}: ${pair[1]}`);
-      }
-
-      // Log the API endpoint being used
       const fullUrl = `${API_BASE_URL}${API_ENDPOINTS.UPLOAD_MATRIX}`;
-      console.log('API endpoint:', fullUrl);
 
-      // Send the request with detailed logging
-      const response = await axios.post(fullUrl, formData, {
-        headers: {
-          // Axios correctly sets multipart/form-data when FormData is passed
-          'Content-Type': 'multipart/form-data',
-        },
-        // Increase timeout for the synchronous processing
-        timeout: 300000, // 5 minutes for large files
-        validateStatus: (status) => {
-          return status < 500; // Resolve only if status is less than 500
-        }
+      const res = await axios.post(fullUrl, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 300000, // 5 minutes
+        validateStatus: (s) => s < 500,
       });
 
-      console.log('Server response received:', response.status, response.statusText);
-
-      // Check if the response is successful
-      if (response.status !== 200) {
-        console.error('Server returned error status:', response.status, response.data);
-        throw new Error(response.data?.message || `Server returned status ${response.status}`);
+      if (res.status !== 200) {
+        throw new Error(res.data?.message || `Server returned status ${res.status}`);
       }
 
-      return response.data.data;
+      return res.data.data as DistanceMatrixResponse;
     } catch (error: any) {
-      console.error('Error uploading file for distance matrix:', error);
-
-      // Handle timeout errors specifically
       if (error.code === 'ECONNABORTED') {
-        throw new Error('Request timed out. The process is taking too long. Please try with a smaller file or contact support.');
+        throw new Error('Request timed out. Try a smaller file or try again.');
       }
-
-      // Handle network errors
       if (error.message === 'Network Error') {
-        throw new Error('Network error. Please check your internet connection and try again.');
+        throw new Error('Network error. Check your connection and try again.');
       }
-
-      // Pass through the error message from the server if available
-      const errorMessage = error.response?.data?.message || error.message || 'Failed to upload file';
-      throw new Error(errorMessage);
+      throw new Error(error.response?.data?.message || error.message || 'Failed to upload file');
     }
   },
 
-  // Calculate distance between two addresses
-  calculateDistance: async (request: DistanceCalculationRequest): Promise<DistanceCalculationResponse> => {
-    try {
-      const fullUrl = `${API_BASE_URL}${API_ENDPOINTS.CALCULATE_DISTANCE}`;
-      console.log('Calculate distance API endpoint:', fullUrl);
-
-      const response = await axios.post(fullUrl, request);
-      return response.data.data;
-    } catch (error) {
-      console.error('Error calculating distance:', error);
-      throw error;
-    }
-  },
-
-  // Download result file
-  downloadResult: (filename: string): string => {
-    // Ensure no double slashes if API_BASE_URL ends with /
-    const baseUrl = API_BASE_URL.endsWith('/') ? API_BASE_URL.slice(0, -1) : API_BASE_URL;
-    return `${baseUrl}${API_ENDPOINTS.DOWNLOAD_RESULT}/${filename}`;
-  },
-
-  // Download processed data as Excel file
-  downloadProcessedData: async (data: any[], filename: string = 'processed_data.xlsx'): Promise<void> => {
-    try {
-      // Dynamically import xlsx
-      const XLSX = await import('xlsx');
-
-      // Convert data to worksheet
-      const worksheet = XLSX.utils.json_to_sheet(data);
-
-      // Create workbook and append worksheet
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'Processed Data');
-
-      // Generate Excel file
-      const excelBuffer = XLSX.write(workbook, {
-        bookType: 'xlsx', type: 'array'
-      });
-
-      // Create Blob from buffer
-      const blob = new Blob([excelBuffer], {
-        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-      });
-
-      // Create download link
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', filename);
-
-      // Append link to body, click it, and remove it
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-
-      // Release the object URL
-      window.URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Error downloading processed data:', error);
-      throw error;
-    }
+  // Build a download URL for a result file
+  downloadResultUrl: (filename: string): string => {
+    const base = API_BASE_URL.endsWith('/') ? API_BASE_URL.slice(0, -1) : API_BASE_URL;
+    return `${base}${API_ENDPOINTS.DOWNLOAD_RESULT}/${filename}`;
   },
 };
 

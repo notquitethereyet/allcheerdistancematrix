@@ -5,7 +5,7 @@ import WorksheetSelector from './components/WorksheetSelector';
 import Button from './components/Button';
 import ProcessingResultsCard from './components/ProcessingResultsCard';
 import { ToastProvider, useToast } from './contexts/ToastContext';
-import { apiService } from './services/api';
+import { apiService, hasTransitRows } from './services/api';
 import logoImage from './assets/logo.png';
 import * as XLSX from 'xlsx';
 
@@ -26,9 +26,6 @@ const AppContent: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [xlsxData, setXlsxData] = useState<any[] | null>(null);
   const [processedData, setProcessedData] = useState<any | null>(null);
-  const [utcDepartureTime, setUtcDepartureTime] = useState<string | null>(null);
-  const [utcUnixTimestamp, setUtcUnixTimestamp] = useState<number | null>(null);
-  const [usedTimeApi, setUsedTimeApi] = useState<boolean | null>(null);
   const [worksheetNames, setWorksheetNames] = useState<string[]>([]);
   const [selectedWorksheet, setSelectedWorksheet] = useState<string>('');
   const [excelWorkbook, setExcelWorkbook] = useState<XLSX.WorkBook | null>(null);
@@ -116,37 +113,17 @@ const AppContent: React.FC = () => {
     }
   };
 
-  // Handle time conversion
-  const handleConvertDepartureTimeToUTC = async () => {
-    if (!selectedDate) return;
-
-    setLoading(true);
-    setError(null);
-    // Clear processed data when time is converted
-    setProcessedData(null);
-
-    try {
-      // Call the API to convert to UTC - pass the Date object directly
-      const result = await apiService.convertToUTC(selectedDate);
-
-      // Update state with the result
-      setUtcDepartureTime(result.utcTime);
-      setUtcUnixTimestamp(result.unixTimestamp);
-      setUsedTimeApi(result.usedApi);
-
-      toast.addToast('Time converted successfully', 'success');
-    } catch (err: any) {
-      console.error('Error converting time:', err);
-      setError(err.message || 'Error converting time to UTC');
-      toast.addToast('Error converting time', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // Handle file processing
   const handleProcessFile = async () => {
-    if (!xlsxData || !selectedDate || !utcDepartureTime) return;
+    if (!xlsxData) return;
+
+    // Check if we need a departure date for TRANSIT rows
+    if (hasTransitRows(xlsxData) && !selectedDate) {
+      setError('A departure time is required when the sheet contains TRANSIT rows.');
+      toast.addToast('Please select a departure time for TRANSIT calculations', 'error');
+      return;
+    }
 
     setLoading(true);
     setError(null);
@@ -159,9 +136,6 @@ const AppContent: React.FC = () => {
     });
 
     try {
-      // Create FormData object
-      const formData = new FormData();
-
       // Convert xlsxData to an Excel file
       const XLSX = await import('xlsx');
 
@@ -185,24 +159,13 @@ const AppContent: React.FC = () => {
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
       });
 
-      // Append the file to FormData
-      formData.append('file', file);
-
-      // Add other parameters
-      formData.append('departureDate', selectedDate.toISOString().split('T')[0]);
-
-      // Format the UTC time string to match the expected format "HH:MM:SS"
-      // The utcDepartureTime is in format like "2025-03-25T15:30:00"
-      const utcTimeOnly = utcDepartureTime.split('T')[1].split('.')[0];
-      formData.append('departureTime', utcTimeOnly);
-
-      // Use the Unix timestamp directly from the time conversion
-      formData.append('timestamp', String(utcUnixTimestamp || 0));
+      // Build FormData using the new API method
+      const formData = apiService.buildUploadFormData(file, xlsxData, selectedDate || undefined);
 
       console.log('Sending to backend:', {
-        departureDate: selectedDate.toISOString().split('T')[0],
-        departureTime: utcTimeOnly,
-        timestamp: utcUnixTimestamp
+        hasTransitRows: hasTransitRows(xlsxData),
+        selectedDate: selectedDate?.toISOString(),
+        formDataEntries: Array.from(formData.entries())
       });
 
       // Show processing toast
@@ -241,8 +204,8 @@ const AppContent: React.FC = () => {
         // Set progress to 100%
         setProgress({
           jobId: null,
-          completed: result.totalPairsCalculated || result.totalPairs || 0,
-          total: result.totalPairsCalculated || result.totalPairs || 0,
+          completed: result.totalPairsInOutput || 0,
+          total: result.totalPairsInOutput || 0,
           percent: 100,
           status: 'completed'
         });
@@ -445,42 +408,28 @@ const AppContent: React.FC = () => {
                 />
               </div>
 
-              <div style={{ marginTop: '1rem' }}>
-                <Button
-                  onClick={handleConvertDepartureTimeToUTC}
-                  variant="secondary"
-                  disabled={!selectedDate || loading}
-                  className="btn btn-highlight"
-                >
-                  Convert to UTC
-                </Button>
-              </div>
-
-              {utcDepartureTime && (
+              {hasTransitRows(xlsxData || []) && (
                 <div className="utc-time-card">
                   <div className="utc-time-header">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.5"/>
                       <path d="M12 6V12L16 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                     </svg>
-                    <h3>UTC Time for Google Maps API</h3>
+                    <h3>TRANSIT Mode Detected</h3>
                   </div>
 
                   <div className="utc-time-content">
                     <div className="utc-time-item">
-                      <span className="utc-time-label">UTC Time:</span>
-                      <span className="utc-time-value">{utcDepartureTime}</span>
+                      <span className="utc-time-label">Status:</span>
+                      <span className="utc-time-value" style={{ color: selectedDate ? 'var(--success-color)' : 'var(--warning-color)' }}>
+                        {selectedDate ? 'Ready for processing' : 'Departure time required'}
+                      </span>
                     </div>
 
                     <div className="utc-time-item">
-                      <span className="utc-time-label">Unix Timestamp:</span>
-                      <span className="utc-time-value">{utcUnixTimestamp}</span>
-                    </div>
-
-                    <div className="utc-time-item">
-                      <span className="utc-time-label">Conversion Method:</span>
-                      <span className="utc-time-value" style={{ color: usedTimeApi ? 'var(--success-color)' : 'var(--warning-color)' }}>
-                        {usedTimeApi ? 'Time API (Server)' : 'Client-side Fallback'}
+                      <span className="utc-time-label">Selected Time:</span>
+                      <span className="utc-time-value">
+                        {selectedDate ? selectedDate.toLocaleString() : 'Not selected'}
                       </span>
                     </div>
                   </div>
@@ -490,7 +439,7 @@ const AppContent: React.FC = () => {
               <div style={{ marginTop: '1.5rem' }}>
                 <Button
                   onClick={handleProcessFile}
-                  disabled={!xlsxData || !utcDepartureTime || loading}
+                  disabled={!xlsxData || (hasTransitRows(xlsxData) && !selectedDate) || loading}
                   isLoading={loading && progress.status === 'processing'}
                   className="btn btn-primary"
                 >
@@ -499,8 +448,8 @@ const AppContent: React.FC = () => {
                 {!xlsxData && (
                   <p className="validation-message">Please upload a file first</p>
                 )}
-                {xlsxData && !utcDepartureTime && (
-                  <p className="validation-message">Please convert the time to UTC first</p>
+                {xlsxData && hasTransitRows(xlsxData) && !selectedDate && (
+                  <p className="validation-message">Please select a departure time for TRANSIT calculations</p>
                 )}
               </div>
             </div>

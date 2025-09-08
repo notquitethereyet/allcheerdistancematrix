@@ -23,7 +23,7 @@ const ProcessingResultsCard: React.FC<ProcessingResultsCardProps> = ({
         
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', marginTop: '1rem' }}>
           <div className="stat-card">
-            <div className="stat-value">{processedData.totalPairsInOutput || processedData.totalPairs || 0}</div>
+            <div className="stat-value">{processedData.totalPairsInOutput || 0}</div>
             <div className="stat-label">Total Pairs</div>
           </div>
           
@@ -50,7 +50,7 @@ const ProcessingResultsCard: React.FC<ProcessingResultsCardProps> = ({
       
       {processedData.resultFilename ? (
         <a
-          href={apiService.downloadResult(processedData.resultFilename)}
+          href={apiService.downloadResultUrl(processedData.resultFilename)}
           className="btn btn-highlight"
           style={{ marginTop: '1rem', display: 'inline-flex', alignItems: 'center' }}
           download
@@ -58,7 +58,7 @@ const ProcessingResultsCard: React.FC<ProcessingResultsCardProps> = ({
           <svg xmlns="http://www.w3.org/2000/svg" className="icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
           </svg>
-          Download Complete Results ({processedData.totalPairsInOutput || processedData.totalPairs} rows)
+          Download Complete Results ({processedData.totalPairsInOutput || 0} rows)
         </a>
       ) : (
         <button
